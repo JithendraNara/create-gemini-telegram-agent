@@ -24,7 +24,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JithendraNara/create-gemini-telegram-agent.git"
+    "url": "git+https://github.com/JithendraNara/create-gemini-telegram-agent.git"
   },
   "bugs": {
     "url": "https://github.com/JithendraNara/create-gemini-telegram-agent/issues"
@@ -34,6 +34,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prepack": "node scripts/clean-template-cache.js",
     "check": "node --check bin/cli.js",
     "pack:dry-run": "npm pack --dry-run"
   }
