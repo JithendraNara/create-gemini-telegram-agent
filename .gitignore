@@ -1,0 +1,12 @@
+node_modules/
+*.tgz
+.DS_Store
+
+# Scaffolded runtime artifacts
+**/.venv/
+**/__pycache__/
+**/.env
+
+# Local token files
+*.token
+*.secrets

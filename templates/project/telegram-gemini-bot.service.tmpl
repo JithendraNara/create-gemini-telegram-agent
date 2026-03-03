@@ -1,0 +1,21 @@
+[Unit]
+Description={{SERVICE_NAME}} service
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{PROJECT_DIR}}
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile={{PROJECT_DIR}}/.env
+ExecStart={{PROJECT_DIR}}/.venv/bin/python {{PROJECT_DIR}}/bot.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{PROJECT_DIR}}
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=default.target

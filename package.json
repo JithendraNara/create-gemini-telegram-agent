@@ -1,0 +1,40 @@
+{
+  "name": "create-gemini-telegram-agent",
+  "version": "0.1.0",
+  "description": "Scaffold and operate a Telegram bot bridge for Gemini CLI.",
+  "type": "module",
+  "bin": {
+    "create-gemini-telegram-agent": "bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "templates",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "gemini-cli",
+    "telegram",
+    "bot",
+    "automation",
+    "scaffold"
+  ],
+  "author": "Jithendra",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JithendraNara/create-gemini-telegram-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JithendraNara/create-gemini-telegram-agent/issues"
+  },
+  "homepage": "https://github.com/JithendraNara/create-gemini-telegram-agent#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check bin/cli.js",
+    "pack:dry-run": "npm pack --dry-run"
+  }
+}
