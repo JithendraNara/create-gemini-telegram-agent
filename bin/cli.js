@@ -171,8 +171,15 @@ function run(command, args, options = {}) {
 }
 
 function commandExists(name) {
-  const result = run('bash', ['-lc', `command -v ${name}`]);
-  return result.ok;
+  if (!/^[a-zA-Z0-9._+-]+$/.test(name)) {
+    return false;
+  }
+  const result = run('which', [name]);
+  if (result.ok) {
+    return true;
+  }
+  const fallback = run('bash', ['-lc', `command -v ${name}`]);
+  return fallback.ok;
 }
 
 function validateServiceName(raw) {
