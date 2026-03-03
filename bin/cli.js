@@ -24,6 +24,7 @@ Usage:
 Options:
   --dir <path>           Target project directory (default: ./gemini-telegram-agent-bot)
   --bot-token <token>    Telegram bot token from BotFather (required for init)
+  --bot-token-file <p>   Read Telegram bot token from file path
   --chat-id <id>         Optional Telegram chat allowlist id (single id)
   --model <name>         Gemini model for bot runtime (default: gemini-2.5-flash)
   --gemini-path <path>   Gemini CLI binary path (default: gemini)
@@ -58,6 +59,7 @@ function parseArgs(argv) {
     command,
     dir: null,
     botToken: null,
+    botTokenFile: null,
     chatId: null,
     model: 'gemini-2.5-flash',
     geminiPath: 'gemini',
@@ -80,6 +82,12 @@ function parseArgs(argv) {
     if (arg === '--bot-token') {
       if (!next) fail('--bot-token requires a value');
       out.botToken = next;
+      i += 1;
+      continue;
+    }
+    if (arg === '--bot-token-file') {
+      if (!next) fail('--bot-token-file requires a value');
+      out.botTokenFile = next;
       i += 1;
       continue;
     }
@@ -165,6 +173,41 @@ function run(command, args, options = {}) {
 function commandExists(name) {
   const result = run('bash', ['-lc', `command -v ${name}`]);
   return result.ok;
+}
+
+function validateServiceName(raw) {
+  if (!raw) fail('service name cannot be empty');
+  if (raw.includes('/')) fail('service name cannot contain "/"');
+  if (!/^[a-zA-Z0-9_.@-]+$/.test(raw)) {
+    fail(`invalid service name: ${raw}`);
+  }
+  return raw;
+}
+
+function validateChatId(raw) {
+  if (!raw) return null;
+  if (!/^-?\d+$/.test(raw)) {
+    fail(`invalid --chat-id value: ${raw}`);
+  }
+  return raw;
+}
+
+function validateBotToken(raw) {
+  const token = (raw || '').trim();
+  if (!token) return null;
+  if (!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+    fail('invalid Telegram bot token format');
+  }
+  return token;
+}
+
+function readTokenFromFile(filePath) {
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) {
+    fail(`bot token file not found: ${resolved}`);
+  }
+  const token = fs.readFileSync(resolved, 'utf-8').trim();
+  return validateBotToken(token);
 }
 
 function ensureDir(dirPath) {
@@ -319,8 +362,18 @@ function checkCommand(name, args = ['--version']) {
 }
 
 function commandInit(options) {
-  if (!options.botToken) {
-    fail('init requires --bot-token <token>');
+  const serviceName = validateServiceName(options.serviceName);
+  const chatId = validateChatId(options.chatId);
+  const tokenFromArg = options.botToken ? validateBotToken(options.botToken) : null;
+  const tokenFromFile = options.botTokenFile ? readTokenFromFile(options.botTokenFile) : null;
+  const tokenFromEnv = process.env.TELEGRAM_BOT_TOKEN
+    ? validateBotToken(process.env.TELEGRAM_BOT_TOKEN)
+    : null;
+  const resolvedToken = tokenFromArg || tokenFromFile || tokenFromEnv;
+  if (!resolvedToken) {
+    fail(
+      'init requires a Telegram bot token via --bot-token, --bot-token-file, or TELEGRAM_BOT_TOKEN env var',
+    );
   }
 
   const projectDir = path.resolve(options.dir || 'gemini-telegram-agent-bot');
@@ -334,7 +387,7 @@ function commandInit(options) {
   const tokenDir = path.join(os.homedir(), '.config', 'gemini-telegram-agent');
   const tokenPath = path.join(tokenDir, 'telegram-bot-token.txt');
   ensureDir(tokenDir);
-  writeFile(tokenPath, `${options.botToken.trim()}\n`, 0o600);
+  writeFile(tokenPath, `${resolvedToken}\n`, 0o600);
 
   const envContent = [
     '# Runtime configuration for Gemini Telegram Agent',
@@ -352,7 +405,7 @@ function commandInit(options) {
     'SESSIONS_LIST_DEFAULT_LIMIT=25',
     'SESSIONS_LIST_MAX_LIMIT=200',
     'SESSION_IDLE_RESET_SEC=1800',
-    options.chatId ? `ALLOWED_CHAT_IDS=${options.chatId}` : 'ALLOWED_CHAT_IDS=',
+    chatId ? `ALLOWED_CHAT_IDS=${chatId}` : 'ALLOWED_CHAT_IDS=',
     '',
   ].join('\n');
   writeFile(path.join(projectDir, '.env'), envContent, 0o600);
@@ -363,7 +416,7 @@ function commandInit(options) {
 
   let systemdInstalled = false;
   if (!options.noSystemd) {
-    systemdInstalled = installSystemdUnit(projectDir, options.serviceName);
+    systemdInstalled = installSystemdUnit(projectDir, serviceName);
   }
 
   info('Scaffold complete.');
@@ -383,7 +436,7 @@ function commandInit(options) {
       console.log(`${step}. systemctl --user daemon-reload && systemctl --user enable --now ${options.serviceName}.service`);
       step += 1;
     }
-    console.log(`${step}. systemctl --user status ${options.serviceName}.service`);
+    console.log(`${step}. systemctl --user status ${serviceName}.service`);
   } else {
     console.log(`${step}. .venv/bin/python bot.py`);
   }
@@ -392,6 +445,7 @@ function commandInit(options) {
 function commandDoctor(options) {
   const projectDir = path.resolve(options.dir || process.cwd());
   const env = loadEnvFile(path.join(projectDir, '.env'));
+  const serviceName = validateServiceName(options.serviceName);
 
   const checks = [];
   checks.push({ name: 'Project directory', ok: fs.existsSync(projectDir), detail: projectDir });
@@ -426,15 +480,21 @@ function commandDoctor(options) {
     detail: pyCompile.ok ? 'ok' : (pyCompile.stderr.trim() || pyCompile.stdout.trim() || 'failed'),
   });
 
-  const serviceName = options.serviceName;
   const hasSystemctl = commandExists('systemctl');
   const userUnitPath = path.join(os.homedir(), '.config', 'systemd', 'user', `${serviceName}.service`);
   if (hasSystemctl && fs.existsSync(userUnitPath)) {
+    const unitText = fs.readFileSync(userUnitPath, 'utf-8');
+    const expectedPath = projectDir;
+    const unitMatchesProject =
+      unitText.includes(`WorkingDirectory=${expectedPath}`) &&
+      unitText.includes(`ExecStart=${expectedPath}/.venv/bin/python ${expectedPath}/bot.py`);
     const svc = run('systemctl', ['--user', 'is-active', `${serviceName}.service`]);
     checks.push({
       name: `Service ${serviceName}`,
-      ok: svc.ok && svc.stdout.trim() === 'active',
-      detail: svc.stdout.trim() || svc.stderr.trim(),
+      ok: unitMatchesProject && svc.ok && svc.stdout.trim() === 'active',
+      detail: unitMatchesProject
+        ? (svc.stdout.trim() || svc.stderr.trim())
+        : `unit exists but points to a different project path (${userUnitPath})`,
     });
   } else {
     checks.push({
@@ -476,7 +536,7 @@ function commandSyncCommands(options) {
   if (!commandExists('systemctl')) {
     fail('systemctl is required for sync-commands.');
   }
-  const serviceName = options.serviceName;
+  const serviceName = validateServiceName(options.serviceName);
   const restart = run('systemctl', ['--user', 'restart', `${serviceName}.service`]);
   if (!restart.ok) {
     fail(`Failed to restart ${serviceName}.service: ${restart.stderr.trim() || restart.stdout.trim()}`);
@@ -485,7 +545,7 @@ function commandSyncCommands(options) {
 }
 
 function commandUninstall(options) {
-  const serviceName = options.serviceName;
+  const serviceName = validateServiceName(options.serviceName);
   const projectDir = path.resolve(options.dir || process.cwd());
   const unitPath = path.join(os.homedir(), '.config', 'systemd', 'user', `${serviceName}.service`);
 

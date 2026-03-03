@@ -26,9 +26,14 @@ Open-source scaffold CLI for running a Telegram bot that forwards messages to Ge
 ```bash
 npx create-gemini-telegram-agent init \
   --dir ./my-gemini-bot \
-  --bot-token <telegram_bot_token> \
+  --bot-token-file ~/.config/gemini-telegram-agent/telegram-bot-token.txt \
   --chat-id <your_chat_id>
 ```
+
+Alternative token input:
+
+- `--bot-token <token>` (quick setup; appears in shell history)
+- `TELEGRAM_BOT_TOKEN=<token> ... init` (recommended for CI/non-interactive)
 
 Then verify:
 

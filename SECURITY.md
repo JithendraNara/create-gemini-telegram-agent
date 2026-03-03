@@ -20,3 +20,4 @@ Open a private security report with:
 - Keep token files mode `600`.
 - Do not print token values in logs.
 - Run the bot with least privilege and avoid root services.
+- Prefer `--bot-token-file` or `TELEGRAM_BOT_TOKEN` over `--bot-token` to avoid shell-history leaks.
